@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>幼儿园伙食费财务管理系统</title>
+    <title>幼儿园财务管理系统</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -282,34 +282,43 @@
         }
         .tip::before { content: "💡 "; }
         
-        /* 分页 */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: 5px;
-            margin-top: 20px;
+        /* 报表特殊样式 */
+        .report-title {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
         }
-        .page-btn {
-            padding: 6px 12px;
-            border: 1px solid #d9d9d9;
-            background: white;
-            cursor: pointer;
-            border-radius: 6px;
+        .report-subtitle {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
         }
-        .page-btn.active { background: #667eea; color: white; border-color: #667eea; }
-        
-        /* 十七栏账特殊样式 */
-        .seventeen-cols th { font-size: 11px; padding: 8px 4px; }
-        .seventeen-cols td { font-size: 11px; padding: 6px 4px; }
-        
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin: 20px 0 15px;
-            padding-left: 12px;
-            border-left: 4px solid #667eea;
+        .report-table {
+            border: 2px solid #333;
+            margin-bottom: 30px;
+        }
+        .report-table th {
+            background: #f5f5f5;
             color: #333;
+            border: 1px solid #333;
+            font-weight: 600;
         }
+        .report-table td {
+            border: 1px solid #333;
+            padding: 8px;
+        }
+        .report-table .section-row {
+            background: #f0f2ff;
+            font-weight: 600;
+        }
+        .report-table .total-row {
+            background: #e6f7ff;
+            font-weight: 600;
+        }
+        .report-table .indent { padding-left: 30px; }
+        .report-table .double-indent { padding-left: 60px; }
         
         /* 期初余额表格 */
         .opening-table input { text-align: right; }
@@ -320,18 +329,26 @@
             padding: 60px 20px;
             color: #999;
         }
-        .empty-state svg { width: 80px; height: 80px; margin-bottom: 20px; opacity: 0.3; }
         
         /* 编辑行高亮 */
         tr.editing { background: #fff7e6 !important; }
         tr.editing td { border-bottom: 2px solid #faad14; }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0 15px;
+            padding-left: 12px;
+            border-left: 4px solid #667eea;
+            color: #333;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- 头部 -->
         <div class="header">
-            <h1>🏫 幼儿园伙食费财务管理系统</h1>
+            <h1>🏫 幼儿园财务管理系统</h1>
             <div class="header-info">
                 <span>📅 会计年度：<strong id="yearDisplay">2025</strong></span>
                 <span>🏢 单位名称：<strong id="unitDisplay">（未设置）</strong></span>
@@ -399,8 +416,8 @@
             </div>
             
             <div class="tip">
-                支持导入您提供的"序时账.xlsx"格式文件。导入后可直接在下方修改凭证，无需重新导入。
-                系统会根据《数据》工作表的逻辑自动识别分录类型。
+                支持导入Excel序时账格式文件。导入后可直接在下方修改凭证，无需重新导入。
+                系统会根据凭证数据自动识别分录类型并生成报表。
             </div>
             
             <div class="card-grid">
@@ -520,47 +537,14 @@
                 <button class="btn btn-secondary" onclick="printReport()">🖨️ 打印报表</button>
             </div>
             
-            <h2 class="section-title">业务活动表（损益表）</h2>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>项目</th>
-                            <th>本月数</th>
-                            <th>本年累计</th>
-                        </tr>
-                    </thead>
-                    <tbody id="incomeTable"></tbody>
-                </table>
-            </div>
+            <!-- 资产负债表 -->
+            <div id="balanceSheetReport"></div>
             
-            <h2 class="section-title">资产负债表</h2>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>资产</th>
-                            <th>期末余额</th>
-                            <th>负债和净资产</th>
-                            <th>期末余额</th>
-                        </tr>
-                    </thead>
-                    <tbody id="balanceTable"></tbody>
-                </table>
-            </div>
+            <!-- 业务活动表 -->
+            <div id="incomeReport"></div>
             
-            <h2 class="section-title">现金流量表</h2>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>项目</th>
-                            <th>金额</th>
-                        </tr>
-                    </thead>
-                    <tbody id="cashflowTable"></tbody>
-                </table>
-            </div>
+            <!-- 现金流量表 -->
+            <div id="cashflowReport"></div>
         </div>
         
         <!-- 7. 打印/导出 -->
@@ -612,34 +596,155 @@
     </div>
 
     <script>
+        // ==================== 完整科目体系（民间非营利组织会计制度）====================
+        const SUBJECTS = [
+            // 资产类
+            { code: '1001', name: '库存现金', category: '资产', direction: '借' },
+            { code: '1002', name: '银行存款', category: '资产', direction: '借' },
+            { code: '1002', name: '银行存款', sub: '中行', category: '资产', direction: '借' },
+            { code: '1101', name: '短期投资', category: '资产', direction: '借' },
+            { code: '1121', name: '应收票据', category: '资产', direction: '借' },
+            { code: '1122', name: '应收账款', category: '资产', direction: '借' },
+            { code: '1122', name: '应收账款', sub: '免学费', category: '资产', direction: '借' },
+            { code: '1122', name: '应收账款', sub: '助学金', category: '资产', direction: '借' },
+            { code: '1123', name: '预付账款', category: '资产', direction: '借' },
+            { code: '1131', name: '应收股利', category: '资产', direction: '借' },
+            { code: '1132', name: '应收利息', category: '资产', direction: '借' },
+            { code: '1201', name: '应收暂付款', category: '资产', direction: '借' },
+            { code: '1211', name: '坏账准备', category: '资产', direction: '贷' },
+            { code: '1221', name: '其他应收款', category: '资产', direction: '借' },
+            { code: '1221', name: '其他应收款', sub: '社保费', category: '资产', direction: '借' },
+            { code: '1301', name: '库存物品', category: '资产', direction: '借' },
+            { code: '1302', name: '待摊费用', category: '资产', direction: '借' },
+            { code: '1401', name: '长期股权投资', category: '资产', direction: '借' },
+            { code: '1402', name: '长期债权投资', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', sub: '房屋及构筑物', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', sub: '专用设备', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', sub: '通用设备', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', sub: '大型修缮', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', sub: '图书、档案', category: '资产', direction: '借' },
+            { code: '1501', name: '固定资产', sub: '家装、用具、装具及动植物', category: '资产', direction: '借' },
+            { code: '1502', name: '累计折旧', category: '资产', direction: '贷' },
+            { code: '1505', name: '在建工程', category: '资产', direction: '借' },
+            { code: '1506', name: '文物文化资产', category: '资产', direction: '借' },
+            { code: '1509', name: '固定资产清理', category: '资产', direction: '借' },
+            { code: '1601', name: '无形资产', category: '资产', direction: '借' },
+            { code: '1701', name: '受托代理资产', category: '资产', direction: '借' },
+            
+            // 负债类
+            { code: '2101', name: '短期借款', category: '负债', direction: '贷' },
+            { code: '2201', name: '应付票据', category: '负债', direction: '贷' },
+            { code: '2202', name: '应付账款', category: '负债', direction: '贷' },
+            { code: '2203', name: '预收账款', category: '负债', direction: '贷' },
+            { code: '2203', name: '预收账款', sub: '保教费', category: '负债', direction: '贷' },
+            { code: '2203', name: '预收账款', sub: '托管费', category: '负债', direction: '贷' },
+            { code: '2203', name: '预收账款', sub: '假期保教费', category: '负债', direction: '贷' },
+            { code: '2203', name: '预收账款', sub: '郭芬娜', category: '负债', direction: '贷' },
+            { code: '2204', name: '应付工资', category: '负债', direction: '贷' },
+            { code: '2204', name: '应付工资', sub: '工资', category: '负债', direction: '贷' },
+            { code: '2204', name: '应付工资', sub: '社保费', category: '负债', direction: '贷' },
+            { code: '2204', name: '应付工资', sub: '福利费', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交增值税', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交城市维护建设税', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交教育费附加', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交地方教育费附加', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交房产税', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交车船使用税', category: '负债', direction: '贷' },
+            { code: '2206', name: '应交税金', sub: '应交土地使用税', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '郭芬娜', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '幼儿伙食费', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '生活用品费', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '校车费用', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '职工伙食费', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '贫困生补助金', category: '负债', direction: '贷' },
+            { code: '2209', name: '其他应付款', sub: '中央专项资金', category: '负债', direction: '贷' },
+            { code: '2301', name: '预提费用', category: '负债', direction: '贷' },
+            { code: '2401', name: '预计负债', category: '负债', direction: '贷' },
+            { code: '2501', name: '长期借款', category: '负债', direction: '贷' },
+            { code: '2502', name: '长期应付款', category: '负债', direction: '贷' },
+            { code: '2601', name: '受托代理负债', category: '负债', direction: '贷' },
+            
+            // 净资产类
+            { code: '3101', name: '非限定性净资产', category: '净资产', direction: '贷' },
+            { code: '3102', name: '限定性净资产', category: '净资产', direction: '贷' },
+            
+            // 收入类
+            { code: '4101', name: '捐赠收入', category: '收入', direction: '贷' },
+            { code: '4102', name: '会费收入', category: '收入', direction: '贷' },
+            { code: '4201', name: '政府补助收入', category: '收入', direction: '贷' },
+            { code: '4201', name: '政府补助收入', sub: '中央专项资金', category: '收入', direction: '贷' },
+            { code: '4301', name: '提供服务收入', category: '收入', direction: '贷' },
+            { code: '4301', name: '提供服务收入', sub: '保教费', category: '收入', direction: '贷' },
+            { code: '4301', name: '提供服务收入', sub: '托管费', category: '收入', direction: '贷' },
+            { code: '4301', name: '提供服务收入', sub: '假期保教费', category: '收入', direction: '贷' },
+            { code: '4401', name: '商品销售收入', category: '收入', direction: '贷' },
+            { code: '4501', name: '投资收益', category: '收入', direction: '贷' },
+            { code: '4601', name: '其他收入', category: '收入', direction: '贷' },
+            
+            // 费用类
+            { code: '5101', name: '业务活动成本', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '工资', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '社保费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '福利费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '食材支出', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '燃气费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '水电费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '日常费用', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '维护费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '校车费用', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '教保费用', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '体检费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '学生活动费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '租金费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '医药费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '办公费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '修缮费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '保险费', category: '费用', direction: '借' },
+            { code: '5101', name: '业务活动成本', sub: '电通信费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '工资', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '社保费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '福利费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '办公费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '水电费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '维修费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '折旧费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '差旅费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '培训费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '招待费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '审计费', category: '费用', direction: '借' },
+            { code: '5201', name: '管理费用', sub: '税费', category: '费用', direction: '借' },
+            { code: '5301', name: '筹资费用', category: '费用', direction: '借' },
+            { code: '5301', name: '筹资费用', sub: '手续费', category: '费用', direction: '借' },
+            { code: '5301', name: '筹资费用', sub: '利息支出', category: '费用', direction: '借' },
+            { code: '5401', name: '其他费用', category: '费用', direction: '借' },
+            { code: '5401', name: '其他费用', sub: '手续费', category: '费用', direction: '借' },
+            { code: '5401', name: '其他费用', sub: '弥补校车亏损', category: '费用', direction: '借' },
+            { code: '5401', name: '其他费用', sub: '滞纳金', category: '费用', direction: '借' },
+            { code: '5401', name: '其他费用', sub: '弥补伙食亏损', category: '费用', direction: '借' },
+        ];
+
         // ==================== 数据存储 ====================
         let appData = {
             year: 2025,
             unitName: '',
             openingBalances: [],
             vouchers: [],
-            subjects: [
-                { code: '1122', name: '其他应收款', sub: '幼儿伙食费', direction: '借' },
-                { code: '2203', name: '预收账款', sub: '幼儿伙食费', direction: '贷' },
-                { code: '2203', name: '预收账款', sub: '陪餐人员伙食费', direction: '贷' },
-                { code: '6301', name: '提供服务收入', sub: '幼儿伙食费', direction: '贷' },
-                { code: '6301', name: '提供服务收入', sub: '陪餐人员伙食费', direction: '贷' },
-                { code: '5101', name: '业务活动成本', sub: '食材支出', direction: '借' },
-                { code: '5101', name: '业务活动成本', sub: '工资', direction: '借' },
-                { code: '5101', name: '业务活动成本', sub: '燃气费', direction: '借' },
-                { code: '5101', name: '业务活动成本', sub: '日常费用', direction: '借' },
-                { code: '5101', name: '业务活动成本', sub: '水电费', direction: '借' },
-                { code: '5101', name: '业务活动成本', sub: '维护费', direction: '借' },
-                { code: '4501', name: '其他收入', sub: '弥补伙食亏损', direction: '贷' },
-                { code: '3101', name: '非限定性净资产', sub: '', direction: '贷' }
-            ]
+            subjects: SUBJECTS
         };
         
         // 从 localStorage 加载
         function loadData() {
             const saved = localStorage.getItem('kindergartenFinance');
             if (saved) {
-                appData = JSON.parse(saved);
+                const parsed = JSON.parse(saved);
+                appData = { ...appData, ...parsed };
+                if (!appData.subjects || appData.subjects.length < 10) {
+                    appData.subjects = SUBJECTS;
+                }
                 document.getElementById('settingYear').value = appData.year;
                 document.getElementById('settingUnit').value = appData.unitName;
                 updateHeader();
@@ -659,7 +764,6 @@
             event.target.classList.add('active');
             document.getElementById('panel-' + tab).classList.add('active');
             
-            // 切换时自动刷新数据
             if (tab === 'ledger') generateLedger();
             if (tab === 'detail') populateSubjectSelect();
             if (tab === 'seventeen') populateSeventeenSelect();
@@ -679,14 +783,14 @@
             document.getElementById('unitDisplay').textContent = appData.unitName || '（未设置）';
             document.getElementById('voucherCount').textContent = appData.vouchers.length;
             
-            // 计算本期盈亏
             let income = 0, expense = 0;
             appData.vouchers.forEach(v => {
-                if (v.subject1 === '提供服务收入' || v.subject1 === '其他收入') {
-                    if (v.credit) income += Math.abs(parseFloat(v.credit) || 0);
+                const subject = appData.subjects.find(s => s.name === v.subject1);
+                if (subject && subject.category === '收入' && v.credit) {
+                    income += Math.abs(parseFloat(v.credit) || 0);
                 }
-                if (v.subject1 === '业务活动成本') {
-                    if (v.debit) expense += parseFloat(v.debit) || 0;
+                if (subject && subject.category === '费用' && v.debit) {
+                    expense += parseFloat(v.debit) || 0;
                 }
             });
             document.getElementById('periodBalance').textContent = (income - expense).toFixed(2);
@@ -737,9 +841,14 @@
         
         function loadSampleOpening() {
             appData.openingBalances = [
-                { code: '1122', name: '其他应收款', sub: '幼儿伙食费', direction: '借', amount: 0 },
-                { code: '2203', name: '预收账款', sub: '幼儿伙食费', direction: '贷', amount: 0 },
-                { code: '3101', name: '非限定性净资产', sub: '', direction: '贷', amount: 0 }
+                { code: '1001', name: '库存现金', sub: '', direction: '借', amount: 67082.81 },
+                { code: '1002', name: '银行存款', sub: '中行', direction: '借', amount: 988874.6 },
+                { code: '1501', name: '固定资产', sub: '房屋及构筑物', direction: '借', amount: 2272662.5 },
+                { code: '1502', name: '累计折旧', sub: '', direction: '贷', amount: 915257.96 },
+                { code: '2203', name: '预收账款', sub: '保教费', direction: '贷', amount: 77770 },
+                { code: '2204', name: '应付工资', sub: '工资', direction: '贷', amount: 100502 },
+                { code: '2209', name: '其他应付款', sub: '幼儿伙食费', direction: '贷', amount: 260550 },
+                { code: '3101', name: '非限定性净资产', sub: '', direction: '贷', amount: 1024178.28 }
             ];
             renderOpeningTable();
             saveData();
@@ -750,13 +859,11 @@
             const tbody = document.getElementById('voucherTable');
             tbody.innerHTML = '';
             
-            // 按日期+凭证号排序
             const sorted = [...appData.vouchers].sort((a, b) => {
                 const da = new Date(a.date || 0), db = new Date(b.date || 0);
                 return da - db || (a.voucherNo || '').localeCompare(b.voucherNo || '');
             });
             
-            // 统计本月
             const now = new Date();
             let monthIncome = 0, monthExpense = 0;
             
@@ -764,11 +871,10 @@
                 const date = v.date ? excelDateToJSDate(v.date) : '';
                 const dateStr = date ? `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}` : '';
                 
-                // 本月统计
                 if (date && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) {
-                    if (v.subject1 === '提供服务收入' && v.credit) monthIncome += Math.abs(parseFloat(v.credit));
-                    if (v.subject1 === '其他收入' && v.credit) monthIncome += Math.abs(parseFloat(v.credit));
-                    if (v.subject1 === '业务活动成本' && v.debit) monthExpense += parseFloat(v.debit);
+                    const subject = appData.subjects.find(s => s.name === v.subject1);
+                    if (subject && subject.category === '收入' && v.credit) monthIncome += Math.abs(parseFloat(v.credit));
+                    if (subject && subject.category === '费用' && v.debit) monthExpense += parseFloat(v.debit);
                 }
                 
                 const tr = document.createElement('tr');
@@ -819,7 +925,6 @@
             const v = appData.vouchers[idx];
             document.getElementById('voucherModalTitle').textContent = '编辑凭证 - ' + (v.voucherNo || '新凭证');
             
-            // 将日期转为 yyyy/mm/dd 格式
             let dateStr = v.date || '';
             if (typeof v.date === 'number') {
                 const d = excelDateToJSDate(v.date);
@@ -878,10 +983,10 @@
         
         function updateSubject2Options(selectedSub) {
             const s1 = document.getElementById('editSubject1').value;
-            const subs = appData.subjects.filter(s => s.name === s1).map(s => s.sub);
+            const subs = appData.subjects.filter(s => s.name === s1).map(s => s.sub).filter(Boolean);
             const sel = document.getElementById('editSubject2');
             sel.innerHTML = '<option value="">（无二级科目）</option>' + 
-                subs.map(s => `<option value="${s}" ${s === selectedSub ? 'selected' : ''}>${s}</option>`).join('');
+                [...new Set(subs)].map(s => `<option value="${s}" ${s === selectedSub ? 'selected' : ''}>${s}</option>`).join('');
         }
         
         function saveVoucherEdit() {
@@ -924,7 +1029,6 @@
             document.getElementById('importModal').classList.remove('active');
         }
         
-        // 拖拽支持
         const dropArea = document.getElementById('dropArea');
         dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('dragover'); });
         dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
@@ -945,7 +1049,6 @@
                     const data = new Uint8Array(e.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
                     
-                    // 尝试读取"序时账"工作表
                     let sheet = workbook.Sheets['序时账'] || workbook.Sheets[0];
                     if (!sheet) {
                         alert('未找到工作表！');
@@ -973,9 +1076,8 @@
                     headers = row;
                     continue;
                 }
-                if (!row[0]) continue; // 跳过空行
+                if (!row[0]) continue;
                 
-                // 匹配列：日期、凭证号、摘要、一级科目、二级科目、借方金额、贷方金额
                 const voucher = {
                     date: row[0] || '',
                     voucherNo: row[1] ? String(row[1]) : '',
@@ -1009,7 +1111,6 @@
         function generateAutoVouchers() {
             if (!confirm('将根据现有凭证自动生成期末结转凭证，是否继续？')) return;
             
-            // 按一级科目汇总
             const summary = {};
             appData.vouchers.forEach(v => {
                 if (!summary[v.subject1]) summary[v.subject1] = { debit: 0, credit: 0 };
@@ -1021,9 +1122,8 @@
             const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')}`;
             const baseNo = appData.vouchers.length;
             
-            // 结转收入
             let incomeTotal = 0;
-            ['提供服务收入', '其他收入'].forEach(subj => {
+            ['捐赠收入', '会费收入', '政府补助收入', '提供服务收入', '商品销售收入', '投资收益', '其他收入'].forEach(subj => {
                 if (summary[subj] && summary[subj].credit > 0) {
                     incomeTotal += summary[subj].credit;
                     appData.vouchers.push({
@@ -1050,41 +1150,41 @@
                 });
             }
             
-            // 结转成本
             let costTotal = 0;
-            if (summary['业务活动成本'] && summary['业务活动成本'].debit > 0) {
-                costTotal = summary['业务活动成本'].debit;
-                appData.vouchers.push({
-                    date: dateStr,
-                    voucherNo: '记-' + (baseNo + 2),
-                    summary: '结转成本',
-                    subject1: '非限定性净资产',
-                    subject2: '',
-                    debit: String(costTotal),
-                    credit: ''
-                });
-                
-                // 按二级科目分录
-                const costDetails = {};
-                appData.vouchers.forEach(v => {
-                    if (v.subject1 === '业务活动成本' && v.debit) {
-                        if (!costDetails[v.subject2]) costDetails[v.subject2] = 0;
-                        costDetails[v.subject2] += parseFloat(v.debit);
-                    }
-                });
-                
-                Object.entries(costDetails).forEach(([sub, amt]) => {
+            ['业务活动成本', '管理费用', '筹资费用', '其他费用'].forEach(subj => {
+                if (summary[subj] && summary[subj].debit > 0) {
+                    costTotal += summary[subj].debit;
                     appData.vouchers.push({
                         date: dateStr,
                         voucherNo: '记-' + (baseNo + 2),
-                        summary: '结转' + sub,
-                        subject1: '业务活动成本',
-                        subject2: sub,
-                        debit: '',
-                        credit: String(amt)
+                        summary: '结转' + subj,
+                        subject1: '非限定性净资产',
+                        subject2: '',
+                        debit: String(summary[subj].debit),
+                        credit: ''
                     });
-                });
-            }
+                    
+                    const costDetails = {};
+                    appData.vouchers.forEach(v => {
+                        if (v.subject1 === subj && v.debit) {
+                            if (!costDetails[v.subject2]) costDetails[v.subject2] = 0;
+                            costDetails[v.subject2] += parseFloat(v.debit);
+                        }
+                    });
+                    
+                    Object.entries(costDetails).forEach(([sub, amt]) => {
+                        appData.vouchers.push({
+                            date: dateStr,
+                            voucherNo: '记-' + (baseNo + 2),
+                            summary: '结转' + sub,
+                            subject1: subj,
+                            subject2: sub,
+                            debit: '',
+                            credit: String(amt)
+                        });
+                    });
+                }
+            });
             
             renderVoucherTable();
             saveData();
@@ -1095,7 +1195,6 @@
         function generateLedger() {
             const ledger = {};
             
-            // 初始化期初
             appData.openingBalances.forEach(o => {
                 const key = o.name + (o.sub ? '-' + o.sub : '');
                 ledger[key] = {
@@ -1109,7 +1208,6 @@
                 };
             });
             
-            // 汇总凭证
             appData.vouchers.forEach(v => {
                 const key = v.subject1 + (v.subject2 ? '-' + v.subject2 : '');
                 if (!ledger[key]) {
@@ -1128,7 +1226,6 @@
                 if (v.credit) ledger[key].credit += parseFloat(v.credit) || 0;
             });
             
-            // 渲染
             const tbody = document.getElementById('ledgerTable');
             tbody.innerHTML = '';
             
@@ -1183,11 +1280,9 @@
             const tbody = document.getElementById('detailTable');
             tbody.innerHTML = '';
             
-            // 找到期初
             const opening = appData.openingBalances.find(o => o.name === subject);
             let balance = opening ? (opening.direction === '借' ? parseFloat(opening.amount) : -parseFloat(opening.amount)) : 0;
             
-            // 过滤并排序
             const records = appData.vouchers.filter(v => v.subject1 === subject)
                 .sort((a, b) => {
                     const da = a.date ? excelDateToJSDate(a.date) : new Date(0);
@@ -1195,7 +1290,6 @@
                     return da - db;
                 });
             
-            // 期初行
             if (opening) {
                 const tr = document.createElement('tr');
                 tr.style.background = '#f0f2ff';
@@ -1249,7 +1343,7 @@
         
         // ==================== 十七栏账 ====================
         function populateSeventeenSelect() {
-            const costSubjects = ['业务活动成本'];
+            const costSubjects = ['业务活动成本', '管理费用', '筹资费用', '其他费用'];
             const sel = document.getElementById('seventeenSubject');
             sel.innerHTML = '<option value="">请选择科目</option>' +
                 costSubjects.map(s => `<option value="${s}">${s}</option>`).join('');
@@ -1259,7 +1353,6 @@
             const subject = document.getElementById('seventeenSubject').value;
             if (!subject) return;
             
-            // 获取所有二级科目作为栏次
             const subSubjects = [...new Set(appData.vouchers
                 .filter(v => v.subject1 === subject && v.subject2)
                 .map(v => v.subject2))];
@@ -1267,7 +1360,6 @@
             const thead = document.getElementById('seventeenHead');
             const tbody = document.getElementById('seventeenTable');
             
-            // 表头：日期、凭证号、摘要、借方、各二级科目、贷方、余额
             let headHTML = '<tr><th>日期</th><th>凭证号</th><th>摘要</th><th>借方合计</th>';
             subSubjects.forEach(sub => {
                 headHTML += `<th>${sub}</th>`;
@@ -1277,7 +1369,6 @@
             
             tbody.innerHTML = '';
             
-            // 按日期汇总
             const records = appData.vouchers.filter(v => v.subject1 === subject)
                 .sort((a, b) => {
                     const da = a.date ? excelDateToJSDate(a.date) : new Date(0);
@@ -1323,63 +1414,384 @@
             window.print();
         }
         
-        // ==================== 报表 ====================
+        // ==================== 报表生成（严格按模板格式）====================
         function generateReport() {
-            // 汇总数据
+            const unitName = appData.unitName || '普宁市流沙东街道湖东中心幼儿园';
+            const year = appData.year;
+            
+            // 汇总所有凭证数据
             const summary = {};
             appData.vouchers.forEach(v => {
-                if (!summary[v.subject1]) summary[v.subject1] = { debit: 0, credit: 0 };
-                if (v.debit) summary[v.subject1].debit += parseFloat(v.debit) || 0;
-                if (v.credit) summary[v.subject1].credit += parseFloat(v.credit) || 0;
+                const key = v.subject1 + (v.subject2 ? '-' + v.subject2 : '');
+                if (!summary[key]) summary[key] = { debit: 0, credit: 0 };
+                if (v.debit) summary[key].debit += parseFloat(v.debit) || 0;
+                if (v.credit) summary[key].credit += parseFloat(v.credit) || 0;
             });
             
-            // 业务活动表
-            const incomeBody = document.getElementById('incomeTable');
-            incomeBody.innerHTML = `
-                <tr><td class="text-left" style="font-weight:bold">一、收入</td><td></td><td></td></tr>
-                <tr><td class="text-left">　提供服务收入</td><td class="num">${(summary['提供服务收入']?.credit || 0).toFixed(2)}</td><td class="num">${(summary['提供服务收入']?.credit || 0).toFixed(2)}</td></tr>
-                <tr><td class="text-left">　其他收入</td><td class="num">${(summary['其他收入']?.credit || 0).toFixed(2)}</td><td class="num">${(summary['其他收入']?.credit || 0).toFixed(2)}</td></tr>
-                <tr style="background:#f5f5f5;font-weight:bold"><td class="text-left">收入合计</td><td class="num">${((summary['提供服务收入']?.credit || 0) + (summary['其他收入']?.credit || 0)).toFixed(2)}</td><td class="num">${((summary['提供服务收入']?.credit || 0) + (summary['其他收入']?.credit || 0)).toFixed(2)}</td></tr>
-                <tr><td class="text-left" style="font-weight:bold">二、费用</td><td></td><td></td></tr>
-                <tr><td class="text-left">　业务活动成本</td><td class="num">${(summary['业务活动成本']?.debit || 0).toFixed(2)}</td><td class="num">${(summary['业务活动成本']?.debit || 0).toFixed(2)}</td></tr>
-                <tr style="background:#f5f5f5;font-weight:bold"><td class="text-left">费用合计</td><td class="num">${(summary['业务活动成本']?.debit || 0).toFixed(2)}</td><td class="num">${(summary['业务活动成本']?.debit || 0).toFixed(2)}</td></tr>
-                <tr style="background:#e6f7ff;font-weight:bold"><td class="text-left">三、净资产变动额</td><td class="num">${(((summary['提供服务收入']?.credit || 0) + (summary['其他收入']?.credit || 0)) - (summary['业务活动成本']?.debit || 0)).toFixed(2)}</td><td class="num">${(((summary['提供服务收入']?.credit || 0) + (summary['其他收入']?.credit || 0)) - (summary['业务活动成本']?.debit || 0)).toFixed(2)}</td></tr>
+            // 计算期初数据
+            const opening = {};
+            appData.openingBalances.forEach(o => {
+                const key = o.name + (o.sub ? '-' + o.sub : '');
+                opening[key] = o.direction === '借' ? parseFloat(o.amount) || 0 : -(parseFloat(o.amount) || 0);
+            });
+            
+            // 辅助函数：获取科目净额
+            function getNet(subject, sub) {
+                const key = subject + (sub ? '-' + sub : '');
+                const s = summary[key] || { debit: 0, credit: 0 };
+                const open = opening[key] || 0;
+                return { debit: s.debit, credit: s.credit, opening: open };
+            }
+            
+            function getAmount(subject, sub, isDebit) {
+                const key = subject + (sub ? '-' + sub : '');
+                const s = summary[key] || { debit: 0, credit: 0 };
+                return isDebit ? s.debit : s.credit;
+            }
+            
+            // ===== 资产负债表 =====
+            const cash = (getNet('库存现金').opening + getNet('库存现金').debit - getNet('库存现金').credit) +
+                        (getNet('银行存款').opening + getNet('银行存款').debit - getNet('银行存款').credit) +
+                        (getNet('银行存款', '中行').opening + getNet('银行存款', '中行').debit - getNet('银行存款', '中行').credit);
+            const shortInvest = getNet('短期投资').opening + getNet('短期投资').debit - getNet('短期投资').credit;
+            const receivable = getNet('应收账款').opening + getNet('应收账款').debit - getNet('应收账款').credit +
+                              getNet('应收账款', '免学费').opening + getNet('应收账款', '免学费').debit - getNet('应收账款', '免学费').credit +
+                              getNet('应收账款', '助学金').opening + getNet('应收账款', '助学金').debit - getNet('应收账款', '助学金').credit;
+            const prepay = getNet('预付账款').opening + getNet('预付账款').debit - getNet('预付账款').credit;
+            const inventory = getNet('库存物品').opening + getNet('库存物品').debit - getNet('库存物品').credit;
+            const deferred = getNet('待摊费用').opening + getNet('待摊费用').debit - getNet('待摊费用').credit;
+            const otherReceivable = getNet('其他应收款').opening + getNet('其他应收款').debit - getNet('其他应收款').credit +
+                                   getNet('其他应收款', '社保费').opening + getNet('其他应收款', '社保费').debit - getNet('其他应收款', '社保费').credit;
+            
+            const currentAssets = cash + shortInvest + receivable + prepay + inventory + deferred + otherReceivable;
+            
+            const fixedAssets = getNet('固定资产').opening + getNet('固定资产', '房屋及构筑物').opening + 
+                               getNet('固定资产', '专用设备').opening + getNet('固定资产', '通用设备').opening +
+                               getNet('固定资产', '大型修缮').opening + getNet('固定资产', '图书、档案').opening +
+                               getNet('固定资产', '家装、用具、装具及动植物').opening +
+                               getAmount('固定资产', null, true) + getAmount('固定资产', '房屋及构筑物', true) +
+                               getAmount('固定资产', '专用设备', true) + getAmount('固定资产', '通用设备', true) +
+                               getAmount('固定资产', '大型修缮', true) + getAmount('固定资产', '图书、档案', true) +
+                               getAmount('固定资产', '家装、用具、装具及动植物', true) -
+                               getAmount('固定资产', null, false) - getAmount('固定资产', '房屋及构筑物', false) -
+                               getAmount('固定资产', '专用设备', false) - getAmount('固定资产', '通用设备', false) -
+                               getAmount('固定资产', '大型修缮', false) - getAmount('固定资产', '图书、档案', false) -
+                               getAmount('固定资产', '家装、用具、装具及动植物', false);
+            
+            const accumDeprec = -(getNet('累计折旧').opening + getNet('累计折旧').debit - getNet('累计折旧').credit);
+            const fixedNet = fixedAssets - accumDeprec;
+            const construction = getNet('在建工程').opening + getNet('在建工程').debit - getNet('在建工程').credit;
+            const cultureAssets = getNet('文物文化资产').opening + getNet('文物文化资产').debit - getNet('文物文化资产').credit;
+            const fixedClear = getNet('固定资产清理').opening + getNet('固定资产清理').debit - getNet('固定资产清理').credit;
+            const intangible = getNet('无形资产').opening + getNet('无形资产').debit - getNet('无形资产').credit;
+            const trusteeAssets = getNet('受托代理资产').opening + getNet('受托代理资产').debit - getNet('受托代理资产').credit;
+            
+            const totalAssets = currentAssets + fixedNet + construction + cultureAssets + fixedClear + intangible + trusteeAssets;
+            
+            const shortLoan = getNet('短期借款').opening + getNet('短期借款').debit - getNet('短期借款').credit;
+            const payable = getNet('应付账款').opening + getNet('应付账款').debit - getNet('应付账款').credit;
+            const advance = getNet('预收账款').opening + getNet('预收账款', '保教费').opening + 
+                           getNet('预收账款', '托管费').opening + getNet('预收账款', '假期保教费').opening +
+                           getNet('预收账款', '郭芬娜').opening +
+                           getAmount('预收账款', null, false) + getAmount('预收账款', '保教费', false) +
+                           getAmount('预收账款', '托管费', false) + getAmount('预收账款', '假期保教费', false) +
+                           getAmount('预收账款', '郭芬娜', false) -
+                           getAmount('预收账款', null, true) - getAmount('预收账款', '保教费', true) -
+                           getAmount('预收账款', '托管费', true) - getAmount('预收账款', '假期保教费', true) -
+                           getAmount('预收账款', '郭芬娜', true);
+            const wages = getNet('应付工资').opening + getNet('应付工资', '工资').opening + 
+                         getNet('应付工资', '社保费').opening + getNet('应付工资', '福利费').opening +
+                         getAmount('应付工资', null, false) + getAmount('应付工资', '工资', false) +
+                         getAmount('应付工资', '社保费', false) + getAmount('应付工资', '福利费', false) -
+                         getAmount('应付工资', null, true) - getAmount('应付工资', '工资', true) -
+                         getAmount('应付工资', '社保费', true) - getAmount('应付工资', '福利费', true);
+            const tax = getNet('应交税金').opening + getNet('应交税金', '应交增值税').opening +
+                       getNet('应交税金', '应交城市维护建设税').opening + getNet('应交税金', '应交教育费附加').opening +
+                       getNet('应交税金', '应交地方教育费附加').opening + getNet('应交税金', '应交房产税').opening +
+                       getNet('应交税金', '应交车船使用税').opening + getNet('应交税金', '应交土地使用税').opening +
+                       getAmount('应交税金', null, false) + getAmount('应交税金', '应交增值税', false) +
+                       getAmount('应交税金', '应交城市维护建设税', false) + getAmount('应交税金', '应交教育费附加', false) +
+                       getAmount('应交税金', '应交地方教育费附加', false) + getAmount('应交税金', '应交房产税', false) +
+                       getAmount('应交税金', '应交车船使用税', false) + getAmount('应交税金', '应交土地使用税', false) -
+                       getAmount('应交税金', null, true) - getAmount('应交税金', '应交增值税', true) -
+                       getAmount('应交税金', '应交城市维护建设税', true) - getAmount('应交税金', '应交教育费附加', true) -
+                       getAmount('应交税金', '应交地方教育费附加', true) - getAmount('应交税金', '应交房产税', true) -
+                       getAmount('应交税金', '应交车船使用税', true) - getAmount('应交税金', '应交土地使用税', true);
+            const otherPay = getNet('其他应付款').opening + getNet('其他应付款', '郭芬娜').opening +
+                            getNet('其他应付款', '幼儿伙食费').opening + getNet('其他应付款', '生活用品费').opening +
+                            getNet('其他应付款', '校车费用').opening + getNet('其他应付款', '职工伙食费').opening +
+                            getNet('其他应付款', '贫困生补助金').opening + getNet('其他应付款', '中央专项资金').opening +
+                            getAmount('其他应付款', null, false) + getAmount('其他应付款', '郭芬娜', false) +
+                            getAmount('其他应付款', '幼儿伙食费', false) + getAmount('其他应付款', '生活用品费', false) +
+                            getAmount('其他应付款', '校车费用', false) + getAmount('其他应付款', '职工伙食费', false) +
+                            getAmount('其他应付款', '贫困生补助金', false) + getAmount('其他应付款', '中央专项资金', false) -
+                            getAmount('其他应付款', null, true) - getAmount('其他应付款', '郭芬娜', true) -
+                            getAmount('其他应付款', '幼儿伙食费', true) - getAmount('其他应付款', '生活用品费', true) -
+                            getAmount('其他应付款', '校车费用', true) - getAmount('其他应付款', '职工伙食费', true) -
+                            getAmount('其他应付款', '贫困生补助金', true) - getAmount('其他应付款', '中央专项资金', true);
+            const accrual = getNet('预提费用').opening + getNet('预提费用').debit - getNet('预提费用').credit;
+            const estimate = getNet('预计负债').opening + getNet('预计负债').debit - getNet('预计负债').credit;
+            
+            const currentLiabilities = shortLoan + payable + advance + wages + tax + otherPay + accrual + estimate;
+            
+            const longLoan = getNet('长期借款').opening + getNet('长期借款').debit - getNet('长期借款').credit;
+            const longPay = getNet('长期应付款').opening + getNet('长期应付款').debit - getNet('长期应付款').credit;
+            const trusteeLiab = getNet('受托代理负债').opening + getNet('受托代理负债').debit - getNet('受托代理负债').credit;
+            
+            const totalLiabilities = currentLiabilities + longLoan + longPay + trusteeLiab;
+            
+            const unrestricted = getNet('非限定性净资产').opening + getNet('非限定性净资产').debit - getNet('非限定性净资产').credit;
+            const restricted = getNet('限定性净资产').opening + getNet('限定性净资产').debit - getNet('限定性净资产').credit;
+            const totalNetAssets = unrestricted + restricted;
+            
+            const totalLiabNet = totalLiabilities + totalNetAssets;
+            
+            // 渲染资产负债表
+            document.getElementById('balanceSheetReport').innerHTML = `
+                <div class="report-title">资产负债表</div>
+                <div class="report-subtitle">会民非01表<br>编制单位：${unitName}&nbsp;&nbsp;&nbsp;&nbsp;${year}年12月31日&nbsp;&nbsp;&nbsp;&nbsp;单位：元</div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th style="width:25%">资产</th>
+                            <th style="width:8%">行次</th>
+                            <th style="width:15%">年初数</th>
+                            <th style="width:15%">期末数</th>
+                            <th style="width:25%">负债和净资产</th>
+                            <th style="width:8%">行次</th>
+                            <th style="width:15%">年初数</th>
+                            <th style="width:15%">期末数</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="section-row"><td colspan="4">流动资产：</td><td colspan="4">流动负债：</td></tr>
+                        <tr><td class="indent">货币资金</td><td>1</td><td class="num"></td><td class="num">${cash.toFixed(2)}</td><td class="indent">短期借款</td><td>24</td><td class="num"></td><td class="num">${Math.abs(shortLoan).toFixed(2)}</td></tr>
+                        <tr><td class="indent">短期投资</td><td>2</td><td class="num"></td><td class="num">${shortInvest.toFixed(2)}</td><td class="indent">应付款项</td><td>25</td><td class="num"></td><td class="num">${Math.abs(payable).toFixed(2)}</td></tr>
+                        <tr><td class="indent">应收款项</td><td>3</td><td class="num"></td><td class="num">${receivable.toFixed(2)}</td><td class="indent">应付工资</td><td>26</td><td class="num"></td><td class="num">${Math.abs(wages).toFixed(2)}</td></tr>
+                        <tr><td class="indent">预付账款</td><td>4</td><td class="num"></td><td class="num">${prepay.toFixed(2)}</td><td class="indent">应交税金</td><td>27</td><td class="num"></td><td class="num">${Math.abs(tax).toFixed(2)}</td></tr>
+                        <tr><td class="indent">存货</td><td>5</td><td class="num"></td><td class="num">${inventory.toFixed(2)}</td><td class="indent">预收账款</td><td>28</td><td class="num"></td><td class="num">${Math.abs(advance).toFixed(2)}</td></tr>
+                        <tr><td class="indent">待摊费用</td><td>6</td><td class="num"></td><td class="num">${deferred.toFixed(2)}</td><td class="indent">预提费用</td><td>29</td><td class="num"></td><td class="num">${Math.abs(accrual).toFixed(2)}</td></tr>
+                        <tr><td class="indent">一年内到期的长期债权投资</td><td>7</td><td class="num"></td><td class="num">0.00</td><td class="indent">预计负债</td><td>30</td><td class="num"></td><td class="num">${Math.abs(estimate).toFixed(2)}</td></tr>
+                        <tr><td class="indent">其他流动资产</td><td>8</td><td class="num"></td><td class="num">0.00</td><td class="indent">一年内到期的长期负债</td><td>31</td><td class="num"></td><td class="num">0.00</td></tr>
+                        <tr class="total-row"><td>流动资产合计</td><td>9</td><td class="num"></td><td class="num">${currentAssets.toFixed(2)}</td><td>其他流动负债</td><td>32</td><td class="num"></td><td class="num">0.00</td></tr>
+                        <tr><td colspan="4"></td><td class="total-row">流动负债合计</td><td>33</td><td class="num"></td><td class="num">${currentLiabilities.toFixed(2)}</td></tr>
+                        <tr class="section-row"><td colspan="4">长期投资：</td><td colspan="4">长期负债：</td></tr>
+                        <tr><td class="indent">长期股权投资</td><td>10</td><td class="num"></td><td class="num">0.00</td><td class="indent">长期借款</td><td>34</td><td class="num"></td><td class="num">${Math.abs(longLoan).toFixed(2)}</td></tr>
+                        <tr><td class="indent">长期债权投资</td><td>11</td><td class="num"></td><td class="num">0.00</td><td class="indent">长期应付款</td><td>35</td><td class="num"></td><td class="num">${Math.abs(longPay).toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>长期投资合计</td><td>12</td><td class="num"></td><td class="num">0.00</td><td class="indent">其他长期负债</td><td>36</td><td class="num"></td><td class="num">0.00</td></tr>
+                        <tr><td colspan="4"></td><td class="total-row">长期负债合计</td><td>37</td><td class="num"></td><td class="num">${(longLoan + longPay).toFixed(2)}</td></tr>
+                        <tr class="section-row"><td colspan="4">固定资产：</td><td colspan="4">受托代理负债：</td></tr>
+                        <tr><td class="indent">固定资产原价</td><td>13</td><td class="num"></td><td class="num">${fixedAssets.toFixed(2)}</td><td class="indent">受托代理负债</td><td>38</td><td class="num"></td><td class="num">${Math.abs(trusteeLiab).toFixed(2)}</td></tr>
+                        <tr><td class="indent">减：累计折旧</td><td>14</td><td class="num"></td><td class="num">${accumDeprec.toFixed(2)}</td><td class="total-row">负债合计</td><td>39</td><td class="num"></td><td class="num">${totalLiabilities.toFixed(2)}</td></tr>
+                        <tr><td class="indent">固定资产净值</td><td>15</td><td class="num"></td><td class="num">${fixedNet.toFixed(2)}</td><td colspan="4"></td></tr>
+                        <tr><td class="indent">在建工程</td><td>16</td><td class="num"></td><td class="num">${construction.toFixed(2)}</td><td colspan="4" class="section-row">净资产：</td></tr>
+                        <tr><td class="indent">文物文化资产</td><td>17</td><td class="num"></td><td class="num">${cultureAssets.toFixed(2)}</td><td class="indent">非限定性净资产</td><td>40</td><td class="num"></td><td class="num">${unrestricted.toFixed(2)}</td></tr>
+                        <tr><td class="indent">固定资产清理</td><td>18</td><td class="num"></td><td class="num">${fixedClear.toFixed(2)}</td><td class="indent">限定性净资产</td><td>41</td><td class="num"></td><td class="num">${restricted.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>固定资产合计</td><td>19</td><td class="num"></td><td class="num">${(fixedNet + construction + cultureAssets + fixedClear).toFixed(2)}</td><td class="total-row">净资产合计</td><td>42</td><td class="num"></td><td class="num">${totalNetAssets.toFixed(2)}</td></tr>
+                        <tr class="section-row"><td colspan="4">无形资产：</td><td colspan="4"></td></tr>
+                        <tr><td class="indent">无形资产</td><td>20</td><td class="num"></td><td class="num">${intangible.toFixed(2)}</td><td colspan="4"></td></tr>
+                        <tr class="section-row"><td colspan="4">受托代理资产：</td><td colspan="4"></td></tr>
+                        <tr><td class="indent">受托代理资产</td><td>21</td><td class="num"></td><td class="num">${trusteeAssets.toFixed(2)}</td><td colspan="4"></td></tr>
+                        <tr><td></td><td>22</td><td class="num"></td><td class="num"></td><td colspan="4"></td></tr>
+                        <tr class="total-row"><td>资产总计</td><td>23</td><td class="num"></td><td class="num">${totalAssets.toFixed(2)}</td><td class="total-row">负债和净资产总计</td><td>43</td><td class="num"></td><td class="num">${totalLiabNet.toFixed(2)}</td></tr>
+                    </tbody>
+                </table>
+                <div style="text-align:center; margin-bottom:40px; color:#666; font-size:12px;">
+                    单位负责人：&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;财务负责人：&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;制表人：
+                </div>
             `;
             
-            // 资产负债表（简化）
-            const asset = (summary['其他应收款']?.debit || 0) - (summary['其他应收款']?.credit || 0);
-            const liability = (summary['预收账款']?.credit || 0) - (summary['预收账款']?.debit || 0);
-            const netAsset = ((summary['提供服务收入']?.credit || 0) + (summary['其他收入']?.credit || 0)) - (summary['业务活动成本']?.debit || 0);
+            // ===== 业务活动表 =====
+            const donationIncome = getAmount('捐赠收入', null, false);
+            const membershipIncome = getAmount('会费收入', null, false);
+            const govSubsidy = getAmount('政府补助收入', null, false) + getAmount('政府补助收入', '中央专项资金', false);
+            const serviceIncome = getAmount('提供服务收入', null, false) + getAmount('提供服务收入', '保教费', false) +
+                                 getAmount('提供服务收入', '托管费', false) + getAmount('提供服务收入', '假期保教费', false);
+            const salesIncome = getAmount('商品销售收入', null, false);
+            const investIncome = getAmount('投资收益', null, false);
+            const otherIncomeAmt = getAmount('其他收入', null, false);
+            const totalIncome = donationIncome + membershipIncome + govSubsidy + serviceIncome + salesIncome + investIncome + otherIncomeAmt;
             
-            const balanceBody = document.getElementById('balanceTable');
-            balanceBody.innerHTML = `
-                <tr><td class="text-left">其他应收款</td><td class="num">${Math.abs(asset).toFixed(2)}</td><td class="text-left">预收账款</td><td class="num">${Math.abs(liability).toFixed(2)}</td></tr>
-                <tr><td class="text-left"></td><td></td><td class="text-left">非限定性净资产</td><td class="num">${Math.abs(netAsset).toFixed(2)}</td></tr>
-                <tr style="background:#f5f5f5;font-weight:bold"><td class="text-left">资产总计</td><td class="num">${Math.abs(asset).toFixed(2)}</td><td class="text-left">负债和净资产总计</td><td class="num">${(Math.abs(liability) + Math.abs(netAsset)).toFixed(2)}</td></tr>
+            const bizCost = getAmount('业务活动成本', null, true) + getAmount('业务活动成本', '工资', true) +
+                           getAmount('业务活动成本', '社保费', true) + getAmount('业务活动成本', '福利费', true) +
+                           getAmount('业务活动成本', '食材支出', true) + getAmount('业务活动成本', '燃气费', true) +
+                           getAmount('业务活动成本', '水电费', true) + getAmount('业务活动成本', '日常费用', true) +
+                           getAmount('业务活动成本', '维护费', true) + getAmount('业务活动成本', '校车费用', true) +
+                           getAmount('业务活动成本', '教保费用', true) + getAmount('业务活动成本', '体检费', true) +
+                           getAmount('业务活动成本', '学生活动费', true) + getAmount('业务活动成本', '租金费', true) +
+                           getAmount('业务活动成本', '医药费', true) + getAmount('业务活动成本', '办公费', true) +
+                           getAmount('业务活动成本', '修缮费', true) + getAmount('业务活动成本', '保险费', true) +
+                           getAmount('业务活动成本', '电通信费', true);
+            const adminCost = getAmount('管理费用', null, true) + getAmount('管理费用', '工资', true) +
+                             getAmount('管理费用', '社保费', true) + getAmount('管理费用', '福利费', true) +
+                             getAmount('管理费用', '办公费', true) + getAmount('管理费用', '水电费', true) +
+                             getAmount('管理费用', '维修费', true) + getAmount('管理费用', '折旧费', true) +
+                             getAmount('管理费用', '差旅费', true) + getAmount('管理费用', '培训费', true) +
+                             getAmount('管理费用', '招待费', true) + getAmount('管理费用', '审计费', true) +
+                             getAmount('管理费用', '税费', true);
+            const financeCost = getAmount('筹资费用', null, true) + getAmount('筹资费用', '手续费', true) +
+                               getAmount('筹资费用', '利息支出', true);
+            const otherCost = getAmount('其他费用', null, true) + getAmount('其他费用', '手续费', true) +
+                             getAmount('其他费用', '弥补校车亏损', true) + getAmount('其他费用', '滞纳金', true) +
+                             getAmount('其他费用', '弥补伙食亏损', true);
+            const totalCost = bizCost + adminCost + financeCost + otherCost;
+            
+            const netChange = totalIncome - totalCost;
+            
+            document.getElementById('incomeReport').innerHTML = `
+                <div class="report-title">业务活动表</div>
+                <div class="report-subtitle">会民非02表<br>编制单位：${unitName}&nbsp;&nbsp;&nbsp;&nbsp;${year}年度&nbsp;&nbsp;&nbsp;&nbsp;单位：元</div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th style="width:35%">项&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;目</th>
+                            <th style="width:8%">行次</th>
+                            <th style="width:19%">本年数</th>
+                            <th style="width:19%">上年数</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="section-row"><td colspan="4">一、收入</td></tr>
+                        <tr><td class="indent">其中：捐赠收入</td><td>1</td><td class="num">${donationIncome.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">会费收入</td><td>2</td><td class="num">${membershipIncome.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">提供服务收入</td><td>3</td><td class="num">${serviceIncome.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">商品销售收入</td><td>4</td><td class="num">${salesIncome.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">政府补助收入</td><td>5</td><td class="num">${govSubsidy.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">投资收益</td><td>6</td><td class="num">${investIncome.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">其他收入</td><td>7</td><td class="num">${otherIncomeAmt.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr class="total-row"><td>收入合计</td><td>8</td><td class="num">${totalIncome.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr class="section-row"><td colspan="4">二、费用</td></tr>
+                        <tr><td class="indent">（一）业务活动成本</td><td>9</td><td class="num">${bizCost.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">（二）管理费用</td><td>10</td><td class="num">${adminCost.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">（三）筹资费用</td><td>11</td><td class="num">${financeCost.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr><td class="indent">（四）其他费用</td><td>12</td><td class="num">${otherCost.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr class="total-row"><td>费用合计</td><td>13</td><td class="num">${totalCost.toFixed(2)}</td><td class="num"></td></tr>
+                        <tr class="section-row"><td colspan="4">三、限定性净资产转为非限定性净资产</td></tr>
+                        <tr><td class="indent"></td><td>14</td><td class="num">0.00</td><td class="num"></td></tr>
+                        <tr class="total-row"><td>四、净资产变动额（若为净资产减少额，以"-"号填列）</td><td>15</td><td class="num">${netChange.toFixed(2)}</td><td class="num"></td></tr>
+                    </tbody>
+                </table>
+                <div style="text-align:center; margin-bottom:40px; color:#666; font-size:12px;">
+                    单位负责人：&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;财务负责人：&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;制表人：
+                </div>
             `;
             
-            // 现金流量表（简化）
-            const cashflowBody = document.getElementById('cashflowTable');
-            const cashIn = (summary['预收账款']?.credit || 0);
-            const cashOut = (summary['其他应收款']?.debit || 0);
-            cashflowBody.innerHTML = `
-                <tr><td class="text-left">一、业务活动产生的现金流量</td><td></td></tr>
-                <tr><td class="text-left">　收到的其他与业务活动有关的现金</td><td class="num">${cashIn.toFixed(2)}</td></tr>
-                <tr><td class="text-left">　支付的其他与业务活动有关的现金</td><td class="num">${cashOut.toFixed(2)}</td></tr>
-                <tr style="background:#f5f5f5;font-weight:bold"><td class="text-left">业务活动产生的现金流量净额</td><td class="num">${(cashIn - cashOut).toFixed(2)}</td></tr>
+            // ===== 现金流量表 =====
+            const cashDonation = 0;
+            const cashMembership = 0;
+            const cashService = getAmount('提供服务收入', null, false) + getAmount('提供服务收入', '保教费', false) +
+                              getAmount('提供服务收入', '托管费', false) + getAmount('提供服务收入', '假期保教费', false);
+            const cashSales = getAmount('商品销售收入', null, false);
+            const cashGov = getAmount('政府补助收入', null, false) + getAmount('政府补助收入', '中央专项资金', false);
+            const cashOtherBiz = getAmount('其他收入', null, false) + getAmount('捐赠收入', null, false) + getAmount('会费收入', null, false);
+            const cashInBiz = cashDonation + cashMembership + cashService + cashSales + cashGov + cashOtherBiz;
+            
+            const cashGrant = 0;
+            const cashWages = getAmount('应付工资', null, true) + getAmount('应付工资', '工资', true) +
+                             getAmount('应付工资', '社保费', true) + getAmount('应付工资', '福利费', true);
+            const cashPurchase = getAmount('业务活动成本', '食材支出', true) + getAmount('业务活动成本', '办公费', true) +
+                                getAmount('库存物品', null, true);
+            const cashOtherBizOut = getAmount('业务活动成本', null, true) + getAmount('管理费用', null, true) +
+                                   getAmount('其他费用', null, true) + getAmount('筹资费用', null, true) -
+                                   cashWages - cashPurchase;
+            const cashOutBiz = cashGrant + cashWages + cashPurchase + cashOtherBizOut;
+            const netBiz = cashInBiz - cashOutBiz;
+            
+            const cashInvestIn = getAmount('短期投资', null, false) + getAmount('长期股权投资', null, false) +
+                                getAmount('长期债权投资', null, false) + getAmount('投资收益', null, false);
+            const cashFixed = getAmount('固定资产', null, true) + getAmount('固定资产', '房屋及构筑物', true) +
+                             getAmount('固定资产', '专用设备', true) + getAmount('固定资产', '通用设备', true) +
+                             getAmount('固定资产', '大型修缮', true) + getAmount('固定资产', '图书、档案', true) +
+                             getAmount('固定资产', '家装、用具、装具及动植物', true) +
+                             getAmount('在建工程', null, true) + getAmount('无形资产', null, true);
+            const cashInvestOut = cashFixed;
+            const cashOtherInvest = getAmount('短期投资', null, true) + getAmount('长期股权投资', null, true) +
+                                   getAmount('长期债权投资', null, true);
+            const cashOutInvest = cashFixed + cashOtherInvest;
+            const netInvest = cashInvestIn - cashOutInvest;
+            
+            const cashLoanIn = getAmount('短期借款', null, false) + getAmount('长期借款', null, false);
+            const cashFinanceOther = 0;
+            const cashInFinance = cashLoanIn + cashFinanceOther;
+            const cashLoanOut = getAmount('短期借款', null, true) + getAmount('长期借款', null, true);
+            const cashInterest = getAmount('筹资费用', '利息支出', true);
+            const cashFinanceOtherOut = 0;
+            const cashOutFinance = cashLoanOut + cashInterest + cashFinanceOtherOut;
+            const netFinance = cashInFinance - cashOutFinance;
+            
+            const exchange = 0;
+            const netIncrease = netBiz + netInvest + netFinance + exchange;
+            
+            document.getElementById('cashflowReport').innerHTML = `
+                <div class="report-title">现金流量表</div>
+                <div class="report-subtitle">会民非03表<br>编制单位：${unitName}&nbsp;&nbsp;&nbsp;&nbsp;${year}年度&nbsp;&nbsp;&nbsp;&nbsp;单位：元</div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th style="width:60%">项&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;目</th>
+                            <th style="width:10%">行次</th>
+                            <th style="width:30%">金额</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="section-row"><td colspan="3">一、业务活动产生的现金流量：</td></tr>
+                        <tr><td class="indent">接受捐赠收到的现金</td><td>2</td><td class="num">${cashDonation.toFixed(2)}</td></tr>
+                        <tr><td class="indent">收取会费收到的现金</td><td>3</td><td class="num">${cashMembership.toFixed(2)}</td></tr>
+                        <tr><td class="indent">提供服务收到的现金</td><td>4</td><td class="num">${cashService.toFixed(2)}</td></tr>
+                        <tr><td class="indent">销售商品收到的现金</td><td>5</td><td class="num">${cashSales.toFixed(2)}</td></tr>
+                        <tr><td class="indent">政府补助收到的现金</td><td>6</td><td class="num">${cashGov.toFixed(2)}</td></tr>
+                        <tr><td class="indent">收到的其他与业务活动有关的现金</td><td>7</td><td class="num">${cashOtherBiz.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>现金流入小计</td><td>8</td><td class="num">${cashInBiz.toFixed(2)}</td></tr>
+                        <tr><td class="indent">提供捐赠或者资助支付的现金</td><td>9</td><td class="num">${cashGrant.toFixed(2)}</td></tr>
+                        <tr><td class="indent">支付给员工以及为员工支付的现金</td><td>10</td><td class="num">${cashWages.toFixed(2)}</td></tr>
+                        <tr><td class="indent">购买商品、接受服务支付的现金</td><td>11</td><td class="num">${cashPurchase.toFixed(2)}</td></tr>
+                        <tr><td class="indent">支付的其他与业务活动有关的现金</td><td>12</td><td class="num">${cashOtherBizOut.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>现金流出小计</td><td>13</td><td class="num">${cashOutBiz.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>业务活动产生的现金流量净额</td><td>14</td><td class="num">${netBiz.toFixed(2)}</td></tr>
+                        <tr class="section-row"><td colspan="3">二、投资活动产生的现金流量：</td></tr>
+                        <tr><td class="indent">收回投资所收到的现金</td><td>15</td><td class="num">${cashInvestIn.toFixed(2)}</td></tr>
+                        <tr><td class="indent">取得投资收益所收到的现金</td><td>16</td><td class="num">0.00</td></tr>
+                        <tr><td class="indent">处置固定资产和无形资产所收回的现金</td><td>17</td><td class="num">0.00</td></tr>
+                        <tr><td class="indent">收到的其他与投资活动有关的现金</td><td>18</td><td class="num">0.00</td></tr>
+                        <tr class="total-row"><td>现金流入小计</td><td>19</td><td class="num">${cashInvestIn.toFixed(2)}</td></tr>
+                        <tr><td class="indent">购建固定资产和无形资产所支付的现金</td><td>20</td><td class="num">${cashFixed.toFixed(2)}</td></tr>
+                        <tr><td class="indent">对外投资所支付的现金</td><td>21</td><td class="num">${cashOtherInvest.toFixed(2)}</td></tr>
+                        <tr><td class="indent">支付的其他与投资活动有关的现金</td><td>22</td><td class="num">0.00</td></tr>
+                        <tr class="total-row"><td>现金流出小计</td><td>23</td><td class="num">${cashOutInvest.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>投资活动产生的现金流量净额</td><td>24</td><td class="num">${netInvest.toFixed(2)}</td></tr>
+                        <tr class="section-row"><td colspan="3">三、筹资活动产生的现金流量：</td></tr>
+                        <tr><td class="indent">借款所收到的现金</td><td>25</td><td class="num">${cashLoanIn.toFixed(2)}</td></tr>
+                        <tr><td class="indent">收到的其他与筹资活动有关的现金</td><td>26</td><td class="num">0.00</td></tr>
+                        <tr class="total-row"><td>现金流入小计</td><td>27</td><td class="num">${cashInFinance.toFixed(2)}</td></tr>
+                        <tr><td class="indent">偿还借款所支付的现金</td><td>28</td><td class="num">${cashLoanOut.toFixed(2)}</td></tr>
+                        <tr><td class="indent">偿付利息所支付的现金</td><td>29</td><td class="num">${cashInterest.toFixed(2)}</td></tr>
+                        <tr><td class="indent">支付的其他与筹资活动有关的现金</td><td>30</td><td class="num">0.00</td></tr>
+                        <tr class="total-row"><td>现金流出小计</td><td>31</td><td class="num">${cashOutFinance.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>筹资活动产生的现金流量净额</td><td>32</td><td class="num">${netFinance.toFixed(2)}</td></tr>
+                        <tr><td>四、汇率变动对现金的影响额</td><td>33</td><td class="num">${exchange.toFixed(2)}</td></tr>
+                        <tr class="total-row"><td>五、现金及现金等价物净增加额</td><td>34</td><td class="num">${netIncrease.toFixed(2)}</td></tr>
+                    </tbody>
+                </table>
+                <div style="text-align:center; color:#666; font-size:12px;">
+                    单位负责人：&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;财务负责人：&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;制表人：
+                </div>
             `;
         }
         
         function exportReport() {
             const wb = XLSX.utils.book_new();
             
-            // 业务活动表
-            const ws1 = XLSX.utils.table_to_sheet(document.querySelector('#incomeTable').parentElement.querySelector('table'));
-            XLSX.utils.book_append_sheet(wb, ws1, '业务活动表');
-            
             // 资产负债表
-            const ws2 = XLSX.utils.table_to_sheet(document.querySelector('#balanceTable').parentElement.querySelector('table'));
-            XLSX.utils.book_append_sheet(wb, ws2, '资产负债表');
+            const ws1 = XLSX.utils.table_to_sheet(document.querySelector('#balanceSheetReport table'));
+            XLSX.utils.book_append_sheet(wb, ws1, '资产负债表');
+            
+            // 业务活动表
+            const ws2 = XLSX.utils.table_to_sheet(document.querySelector('#incomeReport table'));
+            XLSX.utils.book_append_sheet(wb, ws2, '业务活动表');
+            
+            // 现金流量表
+            const ws3 = XLSX.utils.table_to_sheet(document.querySelector('#cashflowReport table'));
+            XLSX.utils.book_append_sheet(wb, ws3, '现金流量表');
             
             XLSX.writeFile(wb, `财务报表_${appData.year}.xlsx`);
         }
@@ -1393,7 +1805,6 @@
             const preview = document.getElementById('voucherPreview');
             preview.innerHTML = '';
             
-            // 按凭证号分组
             const groups = {};
             appData.vouchers.forEach(v => {
                 if (!groups[v.voucherNo]) groups[v.voucherNo] = [];
@@ -1483,6 +1894,9 @@
                 reader.onload = function(evt) {
                     try {
                         appData = JSON.parse(evt.target.result);
+                        if (!appData.subjects || appData.subjects.length < 10) {
+                            appData.subjects = SUBJECTS;
+                        }
                         saveData();
                         loadData();
                         alert('数据导入成功！');
@@ -1502,7 +1916,7 @@
                     unitName: '',
                     openingBalances: [],
                     vouchers: [],
-                    subjects: appData.subjects
+                    subjects: SUBJECTS
                 };
                 saveData();
                 loadData();
@@ -1513,11 +1927,6 @@
         // ==================== 初始化 ====================
         window.onload = function() {
             loadData();
-            
-            // 如果没有数据，加载示例
-            if (appData.vouchers.length === 0 && appData.openingBalances.length === 0) {
-                // 静默等待用户操作
-            }
         };
     </script>
 </body>
